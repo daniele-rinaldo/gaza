@@ -5,9 +5,10 @@ All code has been written and run on RStudio on Mac, version 2024.09.1+394.
 Before running the code: set same working directory as script, unzip "NTL_past_rasters_for_GDP.zip" in the same directory.
 
 Install dependencies required, by running install.packages() for the following packages:
-fixest
-AER
-panelr
+
+- fixest
+- AER
+- panelr
 ggplot2
 raster
 sf
