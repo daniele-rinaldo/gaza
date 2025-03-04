@@ -7,18 +7,19 @@ Before running the code: set same working directory as script, unzip "NTL_past_r
 Install dependencies required, by running install.packages() for the following packages:
 
 - fixest
+- lfe
 - AER
 - panelr
-ggplot2
-raster
-sf
-maps
-did
-DoubleML
-mlr3
-mlr3learners
-randomForest
-tidyverse
-lubridate
-mgcViz
-mgcv
+- ggplot2
+- raster
+- sf
+- maps
+- did
+- DoubleML
+- mlr3
+- mlr3learners
+- randomForest
+- tidyverse
+- lubridate
+- mgcViz
+- mgcv
