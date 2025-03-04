@@ -7,9 +7,7 @@ library(panelr)
 library(ggplot2)
 library(raster)
 library(sf)
-library(terra)
 library(maps)
-library(DIDmultiplegtDYN)
 library(did) 
 library(DoubleML)
 library(mlr3)
@@ -24,13 +22,13 @@ library(mgcv)
 
 ###### build datasets #######
 
-dat_ntl <- read.csv("ntl monthly+weekly/ntl_week_gridded_refactor_fulldata.csv")
-dat_dam <- read.csv("damages weekly/dpm_ic_masked_new_dates_gridded_refactor_fulldata.csv")
-dat_dam2 <- read.csv("~/academica/Gaza/CE lab data/synchronized/damage outputs/damage_monthly_new_cropped_districts_gaza.csv")
-dat_cumul <- read.csv("~/academica/Gaza/CE lab data/synchronized/damage outputs/dpm_ic_masked_cumulative_dates_gridded_refactor.csv")
+dat_ntl <- read.csv("ntl_week_gridded_refactor_fulldata.csv")
+dat_dam <- read.csv("dpm_ic_masked_new_dates_gridded_refactor_fulldata.csv")
+dat_dam2 <- read.csv("damage_monthly_new_cropped_districts_gaza.csv")
+dat_cumul <- read.csv("dpm_ic_masked_cumulative_dates_gridded_refactor.csv")
 
-dat_dam_w <- read.csv("~/academica/Gaza/CE lab data/synchronized/damage outputs/dpm_ic_masked_new_dates_gridded_weeks_gridded_refactor.csv")
-dat_ntl_w <- read.csv("~/academica/Gaza/CE lab data/synchronized/NTL outputs/ntl_weeks_gridded_refactor.csv")
+dat_dam_w <- read.csv("dpm_ic_masked_new_dates_gridded_weeks_gridded_refactor.csv")
+dat_ntl_w <- read.csv("ntl_weeks_gridded_refactor.csv")
 
 
 d_dam <- pivot_longer(dat_dam,
@@ -80,7 +78,7 @@ d_ntl = pivot_longer(dat_ntl,
                      values_drop_na = TRUE)
 d_ntl <- d_ntl[,!colnames(d_ntl) %in% c("system.index",".geo")]
 
-dat_ntl_dist <- read.csv("~/academica/Gaza/CE lab data/synchronized/NTL outputs/ntl_grids_distance_to_ISR_border.csv")
+dat_ntl_dist <- read.csv("ntl_grids_distance_to_ISR_border.csv")
 dat_dist <- dat_ntl_dist[,c("id","HubDist")]
 
 d_ntl$weeks <- as.Date(gsub('[.]',"-",str_sub(d_ntl$week, start=2,end=11)))
@@ -100,7 +98,7 @@ dat <- left_join(d_ntl_m,d_dam_m)
 # dat <- left_join(d_dam_m,d_ntl_m,)
 dat <- left_join(dat, d_dam_m_c,by=c("id","id_m"))
 
-dat_mask <- read.csv("~/academica/Gaza/CE lab data/synchronized/damage outputs/builtup_mask_gridded.csv")
+dat_mask <- read.csv("builtup_mask_gridded.csv")
 
 dat <- left_join(dat, dat_mask, by ="id")
 dat <- left_join(dat,dat_dist)
@@ -124,7 +122,8 @@ dat_dam2_fix$Locality_N[which(dat_dam2_fix$id %in% c(491, 532 , 533, 574, 575))]
 dat <- left_join(dat, dat_dam2_fix[,c("Locality_N","id")], by ="id")
 dat$Locality_N[is.na(dat$Locality_N)] <- "Boundary"
 
-loc <- read.csv("~/academica/Gaza/CE lab data/localities.csv")
+loc <- read.csv("localities.csv")
+
 colnames(loc)[2:3] <- c("Locality_N","NS")
 dat <- left_join(dat,loc, by="Locality_N")
 
@@ -153,23 +152,16 @@ dat_n <- dat %>% group_by(id) %>% summarise(n_bombed = length(which(damage > 0 )
 
 dat <- left_join(dat,dat_n)
 dat <- left_join(dat,dat2)
-dat2 <- dat[which(dat$id_m > 202301),]
-dat3 <- dat[which(dat$id_m != 202308),]
 
 dat$damage_norm <- ifelse(is.nan(dat$damage/dat$area_m2),0,dat$damage/dat$area_m2)
-# dat$damage_norm <- dat$damage/dat$area_m2
-
-# dat$NS2 <- ifelse(is.na(dat$NS),"N","S")
-# dat$is_s <- ifelse(dat$NS=="S",1,0)
-# dat$is_s[which(is.na(dat$is_s))] <- 0
 
 dat$camp <- ifelse( dat$Locality_N=="Khan Yunis Camp" |  dat$Locality_N=="Rafah Camp" | dat$Locality_N=="Deir al Balah Camp" |
                       dat$Locality_N=="An Nuseirat Camp" | dat$Locality_N=="Al Maghazi Camp" |
                       dat$Locality_N=="Al Bureij Camp" |   dat$Locality_N=="Ash Shati' Camp" , 1, 0 )
-
 oct <- dat %>% group_by(id) %>% filter(id_m==202409) %>% summarise(treatment = unique(treatment))
-
 dat$treatment[which(dat$id_m==202410)] <- oct$treatment[1:440]
+
+
 
 ###### stats on data / damages ########
 
@@ -199,6 +191,9 @@ which_max_norm_dam <- dat$Locality_N[which(dat$damage_norm==max(dat$damage_norm)
 View(dat[which(dat$damage_norm>0.75),])
 
 sum(l_ob$damage_cumul)/(365*1000000)
+
+mean(ifelse(is.infinite(l_ob$damage_cumul/l_ob$area_m2),0,l_ob$damage_cumul/l_ob$area_m2),na.rm=T)
+mean(dat_)
 
 #### weekly data + effect of ceasefire #### 
 
@@ -266,18 +261,10 @@ est_m_y <- feols(ihs(ntl) ~ treatment:factor(id_m)| id + id_m+ Locality_N^id_m ,
 est_did <- feols(ihs(ntl) ~ post:is_t | id + id_m , data=dat, cluster="Locality_N")
 require(lfe)
 est_did_loc <- feols(ihs(ntl) ~ i(Locality_N,post*is_t,ref="Boundary")| id + id_m , data=dat, cluster="id")
-# est_did_loc_y <- felm(ihs(ntl) ~ factor(id_m):post:factor(Locality_N) | id + id_m | 0 | id, data=dat)
-# est_did_loc <- felm(ihs(ntl) ~ is_t:post:factor(Locality_N) | id + id_m | 0 | id, data=dat)
 
 etable(est_did_loc,tex=T)
-# dat$jab <- ifelse(dat$Locality_N=="Jabalya Camp",1,0)
-# est_did_loc2 <- felm(ihs(ntl) ~ post:is_t:jab | id + id_m | 0 | id, data=dat)
-# est_did_loc3 <- felm(ihs(ntl) ~ ihs(damage)*jab | id + id_m | 0 | id, data=dat)
 
 pal_shp <- st_read("~/academica/Gaza/gaza shapefiles/gaza_fulldept.shp")
-# plot(pal_shp$geom)
-
-# est_use_loc <- est_did_loc$coefficients[-which(is.nan(est_did_loc$coefficients))]
 
 est_loc <- matrix(0,length(est_did_loc$coefficients),4)
 colnames(est_loc) <- c("Locality_N","est","ntl","pv")
@@ -288,10 +275,7 @@ est_loc[,3] <-  exp(est_did_loc$coefficients) -1
 # est_loc[,4] <- est_did_loc$pval[-which(is.nan(est_did_loc$coefficients[,1]))]
 est_loc[,4] <- est_did_loc$coeftable[,4]
 
-# name_loc <- function(pos){
-# name <- suppressWarnings(substr(tidy(est_did_loc)[pos,1],29,nchar(tidy(est_did_loc)[pos,1])))
-# return(name)
-# }
+
 name_loc <- function(pos){
   name <- suppressWarnings(substr(tidy(est_did_loc)[pos,1],13,nchar(tidy(est_did_loc)[pos,1])-12))
   return(name)
@@ -757,7 +741,6 @@ dat_post <- dat %>%  group_by(id) %>% filter(t > 0) %>% summarise(bombed = max(i
                                                                   loc=unique(Locality_N))
 
 dat_post <- left_join(dat_post,dat_pre[,c("id","ntl_pre")], by ="id")
-# dat_post$ntl_ch <- (dat_post$ntl - dat_post$ntl_pre)/dat_post$ntl_pre
 dat_post$ntl_ch <- (dat_post$ntl - dat_post$ntl_pre)
 
 library(randomForest)
@@ -789,10 +772,7 @@ D1 <- ifelse(dat_pre$bombed == 1, 1, NA)
 D0 <- ifelse(dat_pre$bombed == 0, 1, NA)
 pscore_1 <- na.omit(dat_pre$psc*D1)
 pscore_0 <- na.omit(dat_pre$psc*D0)
-# summary(pscore_1)
-# summary(pscore_0)
-# hist(pscore_1)
-# hist(pscore_0)
+
 # Range of common support
 
 CS_min <- max(min(pscore_1),min(pscore_0))
@@ -830,56 +810,20 @@ dat_mte <- as.data.frame(cbind(psc = dat_post$psc, mte_p = mte, err_p= Y.np0$ger
 mean(mte,na.rm=T )
 min(mte,na.rm=T )
 
-# ### Li and Racine bw + bootstrapped se 
-# # 
-# bw1 <- npregbw(formula = I(ntl_ch/mean(dat_post$ntl_pre)) ~ psc,data=dat_post,method="ll")
-# Y.np1 <- npreg(bws = bw1, gradient=TRUE)
-#  summary(Y.np1)
-# plot(Y.np1, plot.errors.method="bootstrap")
-# plot(Y.np1, plot.errors.method="asymptotic", gradient=TRUE,
-#      ylab="MTE", xlab="Predicted probability of being bombed")
-# mte <- Y.np1$grad*CS_dummy
 
 
+####### nonlinear estimates ######
 
-####### nonlinear stuff ######
-# 
-# nl <- gam( ihs(ntl) ~ s(ihs(damage)*is_t,k=4) + factor(id) + factor(id_m), data=dat)
-# 
-# nl_p      <- getViz(nl)
-# nl_pl     <- plot( sm(nl_p,1),allTerms = FALSE)
-# nl_pl + l_fitLine(colour = "blue") +l_ciLine(mul = 1.96, colour = "black", linetype = 2) +
-#   l_ciLine(mul = 1.96, colour = "black", linetype = 3) +
-#   l_points(shape = 19, size = 1, alpha = 0.1) + ylim(-0.7,0.1)+
-#   labs(x="Log Damage (m2)", y="NTL (%)",title= "Damage")  +
-#   theme_classic()
-
-
-# 
-# dat[which(dat$damage_norm==max(dat$damage_norm,na.rm=T)),]
-# dat[which(dat$damage_norm>0.80),]
 dat$damage_norm2 <- ifelse(is.na(dat$damage/dat$area_m2),0,dat$damage/dat$area_m2)
 est_marg_norm <- feols(ihs(ntl) ~ damage_norm2:factor(post)| id + id_m + Locality_N^id_m , data=dat,cluster="Locality_N")
-# 
-# nl2 <- gam( ihs(ntl) ~ s(damage_norm2,k=4) + factor(id) + factor(id_m), data=dat)
-# nl2_p      <- getViz(nl2)
-# nl2_pl     <- plot( sm(nl2_p,1),allTerms = FALSE)
-# nl2_pl + l_fitLine(colour = "blue") +l_ciLine(mul = 1.96, colour = "black", linetype = 2) +
-#   # l_ciLine(mul = 1.96, colour = "black", linetype = 3) +
-#   l_points(shape = 19, size = 1, alpha = 0.1) + ylim(-0.9,0.1)+
-#   labs(x=" Damage (m2) / Total detectable area", y="NTL (%)")  +
-#   geom_label(aes(x=0.5,y=-0.78),label=paste("Average impact:\n",round(tidy(est_marg_norm)[,2],2)," (",round(tidy(est_marg_norm)[,3],2),")\n",
-#                                             "Avg: ",round(100*mean(dat$damage_norm[which(dat$damage > 0 )],na.rm=T),2),"% of grid cell size\nMax: 100% (Rafah, Dec 2023) ",sep=""))+
-#   theme_classic()
+
 
 
 dat$damage_norm_c <- ifelse(is.na(dat$damage_cumul/dat$area_m2),0,dat$damage_cumul/dat$area_m2)
 dat$damage_norm_c <- ifelse(is.infinite(dat$damage_norm_c),0,dat$damage_norm_c)
-# dat$damage_norm_c <- ifelse(dat$damage_norm_c>1,1,dat$damage_norm_c)
 
 dat_fin <- dat[which(dat$id_m == max(dat$id_m)),]
 
-# nl_c <- gam(ihs(ntl) ~  s(I(damage_cumul/1000000),k=4)+ factor(id) + factor(id_m) , data=dat)
 nl_c <- gam(ihs(ntl) ~  s(damage_norm_c,k=4)+ factor(id) + factor(id_m) , data=dat)
 
 nl_c_p      <- getViz(nl_c)
@@ -921,7 +865,7 @@ ggplot(data=dat_pl_ns, aes(x=Month, y= est_d_n_c)) +geom_line(linetype="dashed")
   labs( x = "Month", y = "% NTL loss for 1% increase in damaged grid area")+
   theme_classic()
 
-§#### effect of multiple damage rounds
+#### effect of multiple damage rounds
 
 ggplot(data=dat_pl_nb, aes(x=estimate,y=nb)) + geom_point()+
   geom_errorbarh(aes(xmin=estimate - 1.96*std.error, xmax=estimate + 1.96*std.error),height=0.75,
@@ -953,7 +897,7 @@ ggplot(data=dat_mte,aes(x=psc, y = mte)) + geom_line() +
   geom_line(aes(x=psc,y=V2+1.96*V3), linetype="dashed")+
   geom_line(aes(x=psc,y=V2-1.96*V3), linetype="dashed")+
   ylab("NTL loss as proportion of pre-conflict average")+ xlab("Predicted probability of being damaged")+
-  geom_label(aes(x=0.5,y=-2.5),label=paste("Overall impact:\n",round(mean(mte,na.rm=T ),2)," times the pre-Oct 7th\n average NTL",sep=""))+
+  # geom_label(aes(x=0.5,y=-2.5),label=paste("Overall impact:\n",round(mean(mte,na.rm=T ),2)," times the pre-Oct 7th\n average NTL",sep=""))+
   theme_classic()
 
 plot(Y.np0, plot.errors.method="asymptotic", gradient=TRUE,
@@ -1048,7 +992,12 @@ gdp_nofe <- felm(gdp_ts~ 1 | year+qt | 0 |year, data=dat_ts)$resid
 cons_nofe <- felm(cons_ts~ 1 | year+qt | 0 |year, data=dat_ts)$resid
 df_pl <- data.frame(dates2,ts(ntl_nofe),ts(gdp_nofe))
 
-# ts.plot(df_pl[,2:3],lty=c(1:2),col=c(1:2), main = "log GDP and log NTL",xlab = "Quarter")
+# 
+# ggplot() + geom_line(data=df_pl,aes(x=dates2,y=gdp_nofe),color="black",linetype="dashed") +
+#   geom_line(data=df_pl,aes(x=dates2,y=cons_nofe),color="red") + xlab("Year") +ylab("")+
+#   ggtitle("Gazan quarterly consumption per capita and night-time luminosity \n(detrended, deseasonalized)")+
+#   scale_x_date(date_breaks="12 month", date_labels="20%y")  +
+#   theme_classic()
 
 ggplot() + geom_line(data=df_pl,aes(x=dates2,y=ntl_nofe),color="black",linetype="dashed") +
   geom_line(data=df_pl,aes(x=dates2,y=gdp_nofe),color="red") + xlab("Year") +ylab("")+
@@ -1057,16 +1006,5 @@ ggplot() + geom_line(data=df_pl,aes(x=dates2,y=ntl_nofe),color="black",linetype=
   theme_classic()
 
 
-ggplot() + geom_line(data=df_pl,aes(x=dates2,y=gdp_nofe),color="black",linetype="dashed") +
-  geom_line(data=df_pl,aes(x=dates2,y=cons_nofe),color="red") + xlab("Year") +ylab("")+
-  ggtitle("Gazan quarterly consumption per capita and night-time luminosity \n(detrended, deseasonalized)")+
-  scale_x_date(date_breaks="12 month", date_labels="20%y")  +
-  theme_classic()
-
 
 ggsave("gdp-ntl.pdf")
-
-
-
-
-
