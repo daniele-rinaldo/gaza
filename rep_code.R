@@ -17,10 +17,12 @@ library(tidyverse)
 library(lubridate)
 library(mgcViz)
 library(mgcv)
+library(here)
 
 
 
 ###### build datasets #######
+
 
 dat_ntl <- read.csv("ntl_week_gridded_refactor_fulldata.csv")
 dat_dam <- read.csv("dpm_ic_masked_new_dates_gridded_refactor_fulldata.csv")
@@ -95,7 +97,6 @@ ihs            <- function(x) log(x + (x^2 + 1) ^ 0.5)
 
 start <-  202309
 dat <- left_join(d_ntl_m,d_dam_m)
-# dat <- left_join(d_dam_m,d_ntl_m,)
 dat <- left_join(dat, d_dam_m_c,by=c("id","id_m"))
 
 dat_mask <- read.csv("builtup_mask_gridded.csv")
@@ -105,7 +106,6 @@ dat <- left_join(dat,dat_dist)
 
 
 dat_dam2_fix <- dat_dam2 %>% group_by(id) %>% summarise(Locality_N = first(Locality_N))
-# dat_old2 <- left_join(dat, dat_dam2_fix[,c("Locality_N","id")], by="id")
 # ### hard code localities that are dropped due to overlapping
 
 unique(dat_dam2$Locality_N)[31] ## check it's Bani Shueila
@@ -130,10 +130,6 @@ dat <- left_join(dat,loc, by="Locality_N")
 dat$t <- dat$id_m - start
 dat$t <- ifelse(dat$t > 3, dat$t - 88,dat$t )
 dat$t <- ifelse(dat$t < -8, dat$t + 88, dat$t )
-
-# dat$t <- dat$id_m - 202310
-# dat$t <- ifelse(dat$t > 2, dat$t - 88,dat$t )
-# dat$t <- ifelse(dat$t < -9, dat$t + 88, dat$t )
 
 
 dat$damage_cumul[which(is.na(dat$damage_cumul))] <- 0 
@@ -163,38 +159,6 @@ dat$treatment[which(dat$id_m==202410)] <- oct$treatment[1:440]
 
 
 
-###### stats on data / damages ########
-
-
-l_ob        <- dat[which(dat$id_m=="202409"),]
-l_ob$damage_norm_cumul <- ifelse(is.infinite(
-  ifelse(is.nan(l_ob$damage_cumul/l_ob$area_m2),0,l_ob$damage_cumul/l_ob$area_m2)),
-  0,
-  l_ob$damage_cumul/l_ob$area_m2)
-tot_avg_dam <- mean(l_ob$damage_cumul)/1000000
-max_dam     <- l_ob[which(l_ob$damage_cumul==max(l_ob$damage_cumul)),]$damage_cumul/1000000
-top_dam_loc <- unique(l_ob$Locality_N[which(l_ob$damage_cumul>= quantile(l_ob$damage_cumul,0.99))])
-# l_ob[which(l_ob$damage_cumul>= quantile(l_ob$damage_cumul,0.85)),]
-avg_num_cells_dam   <- length(last_d[which(last_d !=0)])/length(last_d)
-
-full_dam <- l_ob[which(l_ob$damage_norm_cumul >= 1),]
-dim(full_dam)[1]
-
-total_damage_detectable <- sum(l_ob$damage_cumul)/(sum(l_ob$area_m2))
-
-avg_dam_m            <- mean(dat$damage)
-
-avg_dam_max            <- mean(dat$damage_cumul)
-avg_dam_w            <- mean(dat_w$damage)
-max_norm_dam       <- max(dat$damage_norm)
-which_max_norm_dam <- dat$Locality_N[which(dat$damage_norm==max(dat$damage_norm))]
-View(dat[which(dat$damage_norm>0.75),])
-
-sum(l_ob$damage_cumul)/(365*1000000)
-
-mean(ifelse(is.infinite(l_ob$damage_cumul/l_ob$area_m2),0,l_ob$damage_cumul/l_ob$area_m2),na.rm=T)
-mean(dat_)
-
 #### weekly data + effect of ceasefire #### 
 
 
@@ -222,9 +186,6 @@ d_ntl_w$weeks <- as.Date(gsub('[.]',"-",str_sub(d_ntl_w$week,start=2,end=11)))
 
 
 d_ntl_w  <- d_ntl_w[,!colnames(d_ntl_w) %in% c("system.index",".geo","week")]
-# d_ntl_w$id_m <- as.numeric(paste(lubridate::year(d_ntl_w$weeks),lubridate::month(d_ntl_w$weeks) )
-
-# d_ntl_w$w2 <- d_ntl_w$weeks
 
 
 
@@ -252,6 +213,42 @@ est_cease <- feols(ihs(NTL) ~ is_t:post*factor(ceasef) | id + weeks , data= dat_
 etable(est_cease ,tex=T)
 
 
+
+###### stats on data / damages ########
+
+
+l_ob        <- dat[which(dat$id_m=="202409"),]
+l_ob$damage_norm_cumul <- ifelse(is.infinite(
+  ifelse(is.nan(l_ob$damage_cumul/l_ob$area_m2),0,l_ob$damage_cumul/l_ob$area_m2)),
+  0,
+  l_ob$damage_cumul/l_ob$area_m2)
+tot_avg_dam <- mean(l_ob$damage_cumul)/1000000
+max_dam     <- l_ob[which(l_ob$damage_cumul==max(l_ob$damage_cumul)),]$damage_cumul/1000000
+top_dam_loc <- unique(l_ob$Locality_N[which(l_ob$damage_cumul>= quantile(l_ob$damage_cumul,0.99))])
+# l_ob[which(l_ob$damage_cumul>= quantile(l_ob$damage_cumul,0.85)),]
+# avg_num_cells_dam   <- length(last_d[which(last_d !=0)])/length(last_d)
+
+full_dam <- l_ob[which(l_ob$damage_norm_cumul >= 1),]
+
+total_damage_detectable <- sum(l_ob$damage_cumul)/(sum(l_ob$area_m2))
+
+avg_dam_m            <- dat %>% group_by(id_m) %>% summarise( d_m = sum(damage))
+mean(avg_dam_m$d_m[14:18])
+mean(avg_dam_m$d_m[14:25])
+
+avg_dam_max            <- mean(dat$damage_cumul)
+avg_dam_w              <- mean(dat_w$damage)
+max_norm_dam           <- max(dat$damage_norm)
+which_max_norm_dam <- dat$Locality_N[which(dat$damage_norm==max(dat$damage_norm))]
+
+sum(l_ob$damage_cumul)/(365*1000000)
+
+
+first_ob        <- dat[which(dat$id_m=="202310"),]
+mean(first_ob$damage)
+
+
+
 ##### monthly linear DiD specification + maps #######
 
 
@@ -264,15 +261,12 @@ est_did_loc <- feols(ihs(ntl) ~ i(Locality_N,post*is_t,ref="Boundary")| id + id_
 
 etable(est_did_loc,tex=T)
 
-pal_shp <- st_read("~/academica/Gaza/gaza shapefiles/gaza_fulldept.shp")
+pal_shp <- st_read("shapefiles/gaza_fulldept.shp")
 
 est_loc <- matrix(0,length(est_did_loc$coefficients),4)
 colnames(est_loc) <- c("Locality_N","est","ntl","pv")
-# est_loc[,2] <- est_did_loc$coefficients[-which(is.nan(est_did_loc$coefficients[,1]))]
 est_loc[,2] <- est_did_loc$coefficients
-# est_loc[,3] <-  exp(est_did_loc$coefficients[-which(is.nan(est_did_loc$coefficients[,1]))] ) -1
 est_loc[,3] <-  exp(est_did_loc$coefficients) -1
-# est_loc[,4] <- est_did_loc$pval[-which(is.nan(est_did_loc$coefficients[,1]))]
 est_loc[,4] <- est_did_loc$coeftable[,4]
 
 
@@ -300,7 +294,6 @@ coord_cent2[moved,1] <- coord_cent[moved,1]*0.994-1000
 coord_cent2[moved,2] <- coord_cent[moved,2]
 pal_shp2$est2 <- round(as.numeric(pal_shp2$est),3)
 
-# ggplot() + geom_sf(data=pal_shp2,aes(fill=-round(as.numeric(est),3))) + 
 ggplot() + geom_sf(data=pal_shp2,aes(fill=est2)) + 
   scale_fill_gradient2(name="ATT",low="red",high="white",aesthetics = "fill",space="Lab",midpoint=-0.5,
                        breaks=c(-0.54,-1,-1.5,-2))+
@@ -312,7 +305,7 @@ ggplot() + geom_sf(data=pal_shp2,aes(fill=est2)) +
 
 ###### evac zones
 
-d_ev <-st_read("~/academica/Gaza/CE lab data/gaza_blocks.geojson")
+d_ev <-st_read("shapefiles/gaza_blocks.geojson")
 d_ev$name <- NA
 
 d_ev$name[which(d_ev$description == "ע'זה אלזיתונ")] <- "Alzitun"
@@ -349,7 +342,7 @@ plot(st_geometry(evac_group))
 
 # plot(st_centroid(evac_group))
 
-names_evac <- read.csv("~/academica/Gaza/CE lab data/gaza_evac_zones_full.csv")
+names_evac <- read.csv("shapefiles/gaza_evac_zones_full.csv")
 evac_use <- names_evac[,c("id","name")]
 dat_evac <- left_join(dat,evac_use,by="id")
 
@@ -378,13 +371,12 @@ dat_evac$name[which(dat_evac$Locality_N=="Um Al-Nnaser (Al Qaraya al Badawiya)" 
 
 
 est_did_evac_feols <- feols(ihs(ntl) ~ post:is_t:factor(name)| id + id_m , data=dat_evac, cluster="id")
-est_did_evac <- felm(ihs(ntl) ~ is_t:post:factor(name) | id + id_m | 0 | id, data=dat_evac)
+est_did_evac <- felm(ihs(ntl) ~ is_t:post:factor(name) | id + id_m | 0 | id, data=dat_evac) %>% suppressWarnings()
 
 
-est_evac <- matrix(0,dim(tidy(est_did_evac)[-1,])[1],4)
+est_evac <- matrix(0,dim(tidy(est_did_evac)[-1,])[1],4) %>% suppressWarnings()
 colnames(est_evac) <- c("name","est","ntl","pv")
 est_evac[,2] <- est_did_evac$coefficients[-1,1]
-# est_evac[,3] <-  exp(est_did_evac$coefficients[-1] - tidy(est_did_evac)[-1,3]^2/2) -1
 est_evac[,3] <-  exp(est_did_evac$coefficients[-1])-1
 est_evac[,4] <- est_did_evac$pval[-1]
 
@@ -422,7 +414,6 @@ coord_cent_e_2[rur,2] <- coord_cent_e[rur,2]*0.999
 
 evac_shp$est2 <- round(as.numeric(evac_shp$est),3)
 
-# ggplot() + geom_sf(data=pal_shp2,aes(fill=-round(as.numeric(est),3))) + 
 ggplot() + geom_sf(data=evac_shp,aes(fill=est2)) + 
   scale_fill_gradient2(name="ATT",low="red",high="white",aesthetics = "fill",space="Lab",midpoint=-0.5,
                        breaks=c(-0.54,-1,-1.5,-2))+
@@ -435,7 +426,7 @@ ggplot() + geom_sf(data=evac_shp,aes(fill=est2)) +
 
 
 
-##### other stuff
+##### other Tables in the SM
 
 
 est_did_yr <- feols(ihs(ntl) ~ i(id_m, is_t, ref="202309")  | id + id_m ,
@@ -449,13 +440,13 @@ dat   <- left_join(dat,dat_5, by="id")
 est_did_yr_c = feols(ihs(ntl) ~ i(id_m, ihs(dam_cumul_tot), ref="202309") | id + id_m + Locality_N^id_m ,
                      data=dat,cluster="Locality_N")
 # plot(est2)
-summary(est_did_yr_c)
 
 
 
 ########## staggered DiD designs ################
 
 
+set.seed(1234)
 
 dat_cs <- dat %>% group_by(id)  %>% mutate(group = t[first(which(treatment>0))]) %>% ungroup()
 
@@ -490,11 +481,11 @@ lower <- tidy(d2)[,6]
 
 ##### ML stuff 
 
-set.seed(1234)
+
 dml_did <- function(y1, y0, D, covariates,
                     ml_g = lrn("regr.ranger"),
                     ml_m = lrn("classif.ranger"),
-                    n_folds = 10, n_rep = 1, ...) {
+                    n_folds = 5, n_rep = 1, ...) {
   
   # warning if n_rep > 1 to handle mapping from psi to inf.func
   if (n_rep > 1) {
@@ -520,7 +511,7 @@ est_stagg_ML <- att_gt(yname = "ihs_ntl",
                        idname = "id",
                        gname = "group3",
                        data = dat_cs,
-                       xformla=~Locality_N+camp+NS,
+                       xformla=~camp+NS,
                        cluster= "Locality_N",
                        bstrap = TRUE,
                        cband = TRUE,
@@ -528,21 +519,19 @@ est_stagg_ML <- att_gt(yname = "ihs_ntl",
 d2_ml <- aggte(est_stagg_ML, type="dynamic",bstrap=T,cband=T ,na.rm=T,cluster="Locality_N") 
 d1_ml <- aggte(est_stagg_ML, type="simple",bstrap=T,cband=T ,na.rm=T) 
 
-overall <- 100*round((exp(d1_ml$overall.att - d1_ml$overall.se^2/2)-1),3)
+overall <- 100*round((exp(d1$overall.att - d1$overall.se^2/2)-1),3)
 
-est_cs_ml <- c(0,tidy(d2_ml)[,4])
-upper_ml <- c(0,tidy(d2_ml)[,7])
-lower_ml <- c(0,tidy(d2_ml)[,6])
+est_cs_ml <- c(tidy(d2_ml)[,4])
+upper_ml <- c(tidy(d2_ml)[,7])
+lower_ml <- c(tidy(d2_ml)[,6])
 
 ols_e  <- c(rep(0,2),est_did_yr$coeftable[,1][1:12],0,est_did_yr$coeftable[,1][13:25])
 ols_e_u <- c(rep(0,2),est_did_yr$coeftable[,1][1:12] + 1.96*est_did_yr$coeftable[,2][1:12], 0 , est_did_yr$coeftable[,1][13:25] + 1.96*est_did_yr$coeftable[,2][13:25])
 ols_e_l <- c(rep(0,2),est_did_yr$coeftable[,1][1:12] - 1.96*est_did_yr$coeftable[,2][1:12], 0 , est_did_yr$coeftable[,1][13:25] - 1.96*est_did_yr$coeftable[,2][13:25])
 
 
-# dat_cs_pl <- as.data.frame(cbind(t = tidy(d2)[,3]+1,impacts,impacts_l,impacts_h,est,lower,upper,ols_e,ols_e_u,ols_e_l))
 dat_cs_pl <- as.data.frame(cbind(t = tidy(d2)[,3]+1,est_cs,lower,upper,
                                  ols_e,ols_e_u,ols_e_l,est_cs_ml,upper_ml,lower_ml))
-# dat_cs_pl2 <- dat_cs_pl[-c(1:3,32),] 
 dat_cs_pl2 <- dat_cs_pl[-c(1:2),] 
 
 
@@ -597,6 +586,9 @@ res_tab_stagg <- cbind(
   paste( round(tidy(d2_ml)[,4],3) , " (", round(tidy(d2_ml)[,5],3), ")",sep="")[2:27])
 rownames(res_tab_stagg) <- c(substr(names(est_did_yr$coefficients),7,12)[1:12],"202209",substr(names(est_did_yr$coefficients),7,12)[13:25])
 xtable(res_tab_stagg)
+
+
+
 ##### marginal estimates ######
 
 dat_prebuilt <- dat[which(dat$id_m==202309),]
@@ -617,17 +609,6 @@ est_marg_c_iv     <- feols(ihs(ntl) ~ 1 | id_m+id+Locality_N^id_m | ihs(damage_c
 
 etable(est_marg_c,est_marg_c_iv , tex=T )
 
-
-dat_pl_ns <- as.data.frame(cbind(Month = rep(0:12),
-                                 est_d_n = c(0,est_marg_d_t$coeftable[1:12,1]),
-                                 # est_d_s = c(0,est_marg_south$coeftable[12:22,1]),
-                                 sd_d_n = c(0,est_marg_d_t$coeftable[1:12,2]),
-                                 # sd_d_s = c(0,est_marg_south$coeftable[12:22,2]),
-                                 est_d_n_c = c(0,est_marg_ns_c$coeftable[1:12,1]),
-                                 # est_d_s_c = c(0,est_marg_ns_c$coeftable[11:20,1]),
-                                 sd_d_n_c = c(0,est_marg_ns_c$coeftable[1:12,2])
-                                 # sd_d_s_c = c(0,est_marg_ns_c$coeftable[11:20,2])
-))
 
 #### multiple bombing rounds
 
@@ -687,83 +668,39 @@ est_dam = feols(ihs(ntl) ~ ihs(damage):factor(id_m)| id + id_m , data=dat, clust
 summary(est_dam)
 
 
-est_did_camp = feols(ihs(ntl) ~ ihs(damage):factor(id_m):factor(camp) | id + id_m , data=dat, cluster="Locality_N")
-# plot(est2)
-summary(est_did_camp)
-
-est_did_camp_2 = feols(ihs(ntl) ~ ihs(damage_cumul):factor(id_m):factor(camp) | id + id_m , data=dat, cluster="Locality_N")
-# plot(est2)
-summary(est_did_camp_2)
-
-dat_pl_camp <- as.data.frame(cbind(Month = rep(0:11),
-                                   # est_d = c(0,est_did_camp$coeftable[1:11,1]),
-                                   est_d = c(0,est_dam$coeftable[1:11,1]),
-                                   est_d_c = c(0,est_did_camp$coeftable[12:22,1]),
-                                   # sd_d = c(0,est_did_camp$coeftable[1:11,2]),
-                                   sd_d = c(0,est_dam$coeftable[1:11,2]),
-                                   sd_d_c = c(0,est_did_camp$coeftable[12:22,2])
-))
-
-
-ggplot(data=dat_pl_camp , aes(x=Month, y= est_d)) +geom_line() +
-  geom_ribbon(aes(x=Month,ymin=est_d-1.96*sd_d,ymax=est_d+1.96*sd_d),fill="blue",alpha=0.1)+
-  geom_hline(yintercept=0, col="red",linetype="dashed",alpha=0.5)+
-  geom_vline(xintercept=0, col="black",linetype='dashed')+
-  geom_line(aes(x=Month,y=est_d_c),linetype="dashed",alpha=0.5)+
-  geom_ribbon(aes(x=Month,ymin=est_d_c -1.96*sd_d_c,ymax=est_d_c +1.96*sd_d_c),fill="red",alpha=0.1)+
-  # geom_line(aes(x=t,y=est_cs_ml),alpha=0.5)+
-  # geom_ribbon(aes(x=t,ymin=lower_ml,ymax=upper_ml),fill="blue",alpha=0.2)+
-  geom_label(aes(x=11.7,y=last(est_d)),
-             label="Overall")+
-  geom_label(aes(x=11.7,y=last(est_d_c)),
-             label="Camp")+
-  scale_x_continuous(breaks=c(0,4,8,11),labels=c("Bombing\nstarts","Jan 2024","May 2024","September\n2024"))+
-  labs( x = "Month", y = "% NTL loss for 1% increase in damaged grid area")+
-  theme_classic()
-
-
 
 ####### pscore / MTE stuff ######
 
 
 
-summary(feols(is_t ~ I(HubDist/1000)  , data=dat))
-
-
 dat_pre  <- dat %>% group_by(id) %>% filter(t < 1) %>% summarise(bombed = max(is_t) , distance = unique(HubDist)/1000, 
                                                                  camp = unique(camp),n_bombed=unique(n_bombed),loc=unique(Locality_N),
-                                                                 ntl_pre = mean(ntl))
+                                                                 ntl_pre = mean(ntl) ,ntl_pre_l = mean(ihs(ntl)))
 dat_post <- dat %>%  group_by(id) %>% filter(t > 0) %>% summarise(bombed = max(is_t) , distance = unique(HubDist)/1000, 
                                                                   camp = max(camp),
-                                                                  int_b = sum(damage),ntl = mean(ntl),damage=mean(damage),
+                                                                  int_b = sum(damage),ntl = mean(ntl),ntl_l = mean(ihs(ntl)),damage=mean(damage),
                                                                   damage_cumul = last(damage_cumul),
                                                                   n_bombed = unique(n_bombed),
                                                                   loc=unique(Locality_N))
 
-dat_post <- left_join(dat_post,dat_pre[,c("id","ntl_pre")], by ="id")
+dat_post <- left_join(dat_post,dat_pre[,c("id","ntl_pre","ntl_pre_l")], by ="id")
 dat_post$ntl_ch <- (dat_post$ntl - dat_post$ntl_pre)
-
-library(randomForest)
+dat_post$ntl_ch_l <- (dat_post$ntl_l - dat_post$ntl_pre_l)
 
 ps <- glm(bombed~distance, data=dat_pre, family = "binomial")
-
 dat_pre$psc <- predict(ps, type="response")
 
 plot(dat_pre$distance, dat_pre$psc,ylab="Predicted probability of being damaged", xlab="Distance in km")
 
 dat_pre$psc_weights <- dat_pre$bombed/dat_pre$psc + (1- dat_pre$bombed)/(1-dat_pre$psc)
-dat_psc             <- left_join(dat, dat_pre[,c("id","psc_weights")])
+dat_psc             <- left_join(dat, dat_pre[,c("id","psc_weights","psc")])
 dat_post            <- left_join(dat_post,dat_pre[,c("id","psc")])
 
-est_did_psc = feols(ihs(ntl) ~ post:is_t | id + id_m + Locality_N , 
-                    data=dat_psc, cluster="Locality_N", weights= dat_psc$psc_weights)
-# plot(est2)
+est_did_psc <- feols(ihs(ntl) ~ post:is_t | id + id_m + Locality_N , 
+                     data=dat_psc, cluster="Locality_N", weights= dat_psc$psc_weights)
 summary(est_did_psc)
 
-
-est_did_psc2 = feols(ihs(ntl) ~ ihs(damage_cumul):factor(id_m) | id + id_m , data=dat_psc,
-                     cluster="Locality_N", weights= dat_psc$psc_weights)
-# plot(est2)
+est_did_psc2 = feols(ihs(ntl) ~  post  | 0 | is_t ~ log(HubDist):post , data=dat_psc,cluster="Locality_N")
 summary(est_did_psc2)
 
 
@@ -789,28 +726,47 @@ CS
 pscore_1_2 <- pscore_1[-which(pscore_1>0.99)]
 pscore.hist_1 <- hist(pscore_1_2, br=50)
 pscore.hist_0 <- hist(pscore_0, br=50)
-plot(pscore.hist_1,main="P(bombed=1) histogram for bombed (blue) and unbombed (red) grids",xlab="P(bombed)", col=adjustcolor("blue", 0.3))
+plot(pscore.hist_1,main="P(damaged=1) histogram for damaged (blue) and undamaged (red) grids",xlab="P(damaged)", col=adjustcolor("blue", 0.3))
 lines(pscore.hist_0, lty=2, col=adjustcolor("red", 0.3))
+
+dat_post$treat <- ifelse(dat_post$damage >0,1,0)
+summary(ivreg(I(ntl_ch/ntl_pre)~ihs(damage) | psc , data=dat_post))
+summary(ivreg(ntl_ch ~ treat| psc , data=dat_post))
+summary(ivreg(ntl_ch ~ bombed + factor(loc) | psc +factor(loc), data=dat_post))
+
+dat_post$is_t <- ifelse(dat_post$damage>0,1,0)
+summary(ivreg(ihs(ntl_ch)  ~ is_t | distance, data=dat_post))
+
+summary(feols(ihs(ntl)~ ihs(damage):factor(id_m) | id + id_m  ,data=dat))
+summary(ivreg(I(ntl_ch/dat_post$ntl_pre)  ~ ihs(damage) | distance, data=dat_post))
+summary(ivreg(I(ntl_ch/dat_post$ntl_pre)  ~ ihs(damage_cumul) | distance, data=dat_post))
+summary(ivreg(I(ntl_ch/dat_post$ntl_pre) ~ ihs(damage_cumul) | psc,data=dat_post))
+summary(ivreg(I(ntl_ch/ntl) ~ ihs(damage) | psc,data=dat_post))
+
+cf_d <- lm(ihs(damage)~ psc,data=dat_post)$residuals
+
+summary(ivreg(ntl_ch~bombed | psc,data=dat_post))
 
 
 library(np)
 
-
-
-bw0   <- npregbw(I(ntl_ch/mean(dat_post$ntl_pre)) ~ psc , data=dat_post, regtype="ll", bwmethod="cv.aic")
+bw0   <- npregbw(I(ntl_ch/max(dat_post$ntl_pre[which(dat_post$bombed==1)])) ~ psc , data=dat_post, regtype="ll", bwmethod="cv.aic")
 Y.np0 <- npreg(bws = bw0, gradient=TRUE)
-
 plot(Y.np0, plot.errors.method="bootstrap", gradient=TRUE,
-     ylab="MTE", xlab="Predicted probability of being bombed")
+     ylab="MTE, normalised by pre-conflict peak", xlab="Predicted probability of being bombed")
 # The MTE is valid over the region of common support
 mte <- Y.np0$grad*CS_dummy
 
 dat_mte <- as.data.frame(cbind(psc = dat_post$psc, mte_p = mte, err_p= Y.np0$gerr))
+ggplot(data=dat_mte,aes(x=psc, y = mte)) + geom_line() +
+  geom_line(aes(x=psc,y=V2+1.96*V3), linetype="dashed")+
+  geom_line(aes(x=psc,y=V2-1.96*V3), linetype="dashed")+
+  ylab("NTL loss as proportion of pre-conflict peak")+ xlab("Predicted probability of being damaged")+
+  geom_label(aes(x=0.4,y=-0.3),label=paste("Overall impact:\n",round(mean(mte,na.rm=T ),2)," times the pre-Oct 7th\n peak NTL",sep=""))+
+  theme_classic()
 
 mean(mte,na.rm=T )
 min(mte,na.rm=T )
-
-
 
 ####### nonlinear estimates ######
 
@@ -906,7 +862,7 @@ plot(Y.np0, plot.errors.method="asymptotic", gradient=TRUE,
 # other fig for SM
 
 
-d_pl_n <- read.csv("~/academica/Gaza/CE lab data/dpm_ic_masked_cumulative_dates_gridded_refactor-total_percentage.csv")
+d_pl_n <- read.csv("dpm_ic_masked_cumulative_dates_gridded_refactor-total_percentage.csv")
 
 d_plot_x <-  as.data.frame(cbind(as.numeric(d_pl_n[1,2:60]),as.numeric(d_pl_n[2,2:60]),gsub("\\.", "/",  mdy(substr(colnames(d_pl_n)[2:60],2,11))) ))
 colnames(d_plot_x) <- c("perc","cumul","date")
@@ -926,41 +882,47 @@ ggplot(d_plot_x) +
 ########### GDP-NTL EXCHANGE RATE ########### 
 
 
-## USING THE CLIPPED RASTERS
-# wd <- "/Users/dr463/academica/Gaza/GDP-ntl/NTL monthly/NTL/NTL_clipped"
-# setwd(wd)
-# files <- list.files(pattern = "\\.tif$")
-# 
-# ntl_m <- rep(0,length(files))
-# 
-# for (i in 1:length(files)){ 
-# dat <- raster(files[i])
-# ntl_m[i] <- mean(values(dat),na.rm=T)
-# }
-
 ## USING THE RASTER-TO-POINT DATASETS (easier to remove anomalies)
-# setwd("/Users/dr463/academica/Gaza/GDP-ntl/NTL monthly/NTL/NTL_clipped/points_NTL_clipped")
-files <- list.files(pattern = "point_cropNTL-")
+
+files <- list.files(path="NTL_past_rasters_for_GDP/",pattern = "point_cropNTL-")
+
 ntl_m <- rep(0,length(files))
 
 for (i in 1:length(files)){ 
-  dat <- read.csv(files[i])
+  rast_name <- paste("NTL_past_rasters_for_GDP/",files[i],sep="")
+  dat <- read.csv(rast_name)
   dat$VALUE[which(dat$VALUE==65535)] <- NA ### in the NASA data 65535 = NA. Remove or skews the averages!
   ntl_m[i] <- mean(dat$VALUE,na.rm=T)
 }
 # 
 library(openxlsx) 
 
-# gdp = read.xlsx("gaza_gdp.xlsx") # for the West Bank
-gdp = read.xlsx("Gaza quarterly GDP.xlsx") # for Gaza, per capita
+gdp  <- read.xlsx("Gaza quarterly GDP.xlsx") # for Gaza, per capita
 cons <- read.xlsx("consumption_gaza.xlsx")
 
 ntl_m2 <- ntl_m[seq(1,141,by=3)] # get the quarterly values of NTL
+
+ntl_qtl <- c( mean(dat$ntl_x[which(dat$id_m==202309|dat$id_m==202308|dat$id_m==202307)]),
+              mean(dat$ntl_x[which(dat$id_m==202306|dat$id_m==202305|dat$id_m==202304)]),
+              mean(dat$ntl_x[which(dat$id_m==202303|dat$id_m==202302|dat$id_m==202301)]),
+              mean(dat$ntl_x[which(dat$id_m==202212|dat$id_m==202211|dat$id_m==202210)]),
+              mean(dat$ntl_x[which(dat$id_m==202209|dat$id_m==202208|dat$id_m==202207)]),
+              mean(dat$ntl_x[which(dat$id_m==202312|dat$id_m==202311|dat$id_m==202310)])
+)
+ntl_dat <- dat %>% group_by(id_m) %>% summarise(ntl_m = mean(ntl))
+ntl_dat <- ntl_dat[-27,]
+
 gdp2 <- gdp$Gaza.Strip[49:95] # avoid the last quarter as GDP obviously craters
 # 
 
+gdp3 <- gdp$Gaza.Strip[82:96] 
+ch_gdp <- (gdp3[15]-mean(gdp3[1:14]))/mean(gdp3[1:14])
+ch_ntl <- (mean(dat$ntl_x[which(dat$id_m==202312)])- mean(dat$ntl_x[which(dat$id_m<=202309)]))/mean(dat$ntl_x[which(dat$id_m<=202309)])
+ch_gdp/ch_ntl ### consistent 
+ch_gdp/median(as.numeric(pal_shp2$ntl),na.rm=T)
+
 dates <- seq(as.Date("2012-01-01"),as.Date("2023-10-01"),by="months")
-dates2 <- dates[seq(1,141,by=3)]
+dates2 <- dates[seq(3,143,by=3)]
 
 ntl_ts <- ts(ihs(ntl_m2))
 gdp_ts <- ts(ihs(gdp2))
@@ -968,11 +930,10 @@ cons_ts <- ts(ihs(cons[,2]))
 qt      <-  rep(c(1,2,3,4),17)[1:47]
 year    <-   year(dates2)
 
-dat_ts <- data.frame(ntl_ts, gdp_ts, cons_ts, cons, dates2,qt,year)
+dat_ts <- data.frame(ntl_ts, gdp_ts, cons_ts, dates2,qt,year)
 
 
 
-# ts.plot(15+ntl_ts,gdp_ts)
 library(lfe)
 library(plm)
 
@@ -980,31 +941,60 @@ library(plm)
 ntlgdp  <- plm(gdp_ts  ~ -1+ntl_ts, data=dat_ts, index=c("year"), model="random")
 ntlcons <- plm(cons_ts ~ -1+ntl_ts, data=dat_ts, index=c("year"), model="random")
 
-
 ### FE
-summary(felm(ntl_ts ~ gdp_ts |year | 0 |year, data=dat_ts))
-# summary(felm(gdp_ts ~ ntl_ts | year | 0 |0, data=dat_ts))
-summary(felm(ntl_ts~cons_ts | qt | 0 |0,data=dat_ts))
+ntl_gdp   <- felm( ntl_ts ~ gdp_ts | year | 0 | year , data=dat_ts)
+# ntl_gdp   <- feols(ntl_ts  ~ gdp_ts |year , data=dat_ts)
+ntl_cons   <- felm( ntl_ts ~cons_ts | 0 | 0 | year , data=dat_ts)
+
+summary(ntl_gdp )
+summary(ntl_cons)
+
+require(stargazer)
+stargazer(ntl_gdp)
+ci_u <- ntl_gdp$coefficients + sqrt(ntl_gdp$clustervcv)
+ci_l <- ntl_gdp$coefficients - sqrt(ntl_gdp$clustervcv)
+
+1/ci_u
+1/ci_l
 
 
-ntl_nofe <- felm(ntl_ts~ 1 | year+qt | 0 |year, data=dat_ts)$resid
+ntl_nofe <- felm(ntl_ts~ 1 | year+qt| 0 |year, data=dat_ts)$resid
 gdp_nofe <- felm(gdp_ts~ 1 | year+qt | 0 |year, data=dat_ts)$resid
 cons_nofe <- felm(cons_ts~ 1 | year+qt | 0 |year, data=dat_ts)$resid
 df_pl <- data.frame(dates2,ts(ntl_nofe),ts(gdp_nofe))
 
-# 
-# ggplot() + geom_line(data=df_pl,aes(x=dates2,y=gdp_nofe),color="black",linetype="dashed") +
-#   geom_line(data=df_pl,aes(x=dates2,y=cons_nofe),color="red") + xlab("Year") +ylab("")+
-#   ggtitle("Gazan quarterly consumption per capita and night-time luminosity \n(detrended, deseasonalized)")+
-#   scale_x_date(date_breaks="12 month", date_labels="20%y")  +
-#   theme_classic()
 
 ggplot() + geom_line(data=df_pl,aes(x=dates2,y=ntl_nofe),color="black",linetype="dashed") +
   geom_line(data=df_pl,aes(x=dates2,y=gdp_nofe),color="red") + xlab("Year") +ylab("")+
   ggtitle("Gazan quarterly GDP per capita and night-time luminosity \n(detrended, deseasonalized)")+
+  scale_x_date(date_breaks="1 year", date_labels="20%y")  +
+  # scale_x_continuous()+
+  # geom_vline(xintercept=dates2[12],linetype="dashed")+
+  geom_rect(aes(xmin=dates2[10], xmax=dates2[12], ymin=-0.28, ymax=0.25),linewidth=0,colour="red",alpha=0.1,)+
+  geom_label( aes(x=dates2[15],y=0.22,label="2014 Gaza war"),size=4)+
+  theme_classic()
+
+# 
+ggplot() + geom_line(data=df_pl,aes(x=dates2,y=gdp_nofe),color="black",linetype="dashed") +
+  geom_line(data=df_pl,aes(x=dates2,y=cons_nofe),color="red") + xlab("Year") +ylab("")+
+  ggtitle("Gazan quarterly consumption per capita and night-time luminosity \n(detrended, deseasonalized)")+
   scale_x_date(date_breaks="12 month", date_labels="20%y")  +
   theme_classic()
 
 
-
 ggsave("gdp-ntl.pdf")
+
+
+pal_shp2$est_gdp <- round(as.numeric(pal_shp2$ntl)*(1/ntl_gdp$coefficients[1]),3)
+
+
+ggplot() + geom_sf(data=pal_shp2,aes(fill=est2)) + 
+  scale_fill_gradient2(name="ATT (NTL)",low="red",high="white",aesthetics = "fill",space="Lab",midpoint=-0.5,
+                       breaks=c(-0.54,-1,-1.5,-2))+
+  # scale_fill_gradient2(position="bottom" , low = "blue", high = "red", 
+  #                      midpoint = median(abs(as.numeric(pal_shp2$est)))) 
+  geom_label(aes(x=coord_cent2[,1],y=coord_cent2[,2],label=100*pal_shp2$est_gdp),size=3)+
+  theme_void()
+
+ggsave("map_gdp_ntl.pdf")
+
